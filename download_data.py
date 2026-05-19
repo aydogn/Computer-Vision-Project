@@ -1,5 +1,8 @@
-from huggingface_hub import snapshot_download
 import os
+
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
+from huggingface_hub import snapshot_download
 
 def download_kvasir_seg():
     print("Downloading Kvasir-SEG dataset from Hugging Face...")
@@ -11,7 +14,7 @@ def download_kvasir_seg():
         repo_id="Angelou0516/kvasir-seg",
         repo_type="dataset",
         local_dir=local_dir,
-        local_dir_use_symlinks=False
+        max_workers=4,
     )
     print(f"Dataset downloaded successfully to {local_dir}")
 

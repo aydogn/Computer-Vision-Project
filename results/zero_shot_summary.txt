@@ -1,0 +1,13 @@
+Zero-Shot SAM Baseline
+Model: vit_b
+Prompt: ground-truth bounding box
+Dataset root: kvasir-seg
+Checkpoint: checkpoints\sam_vit_b_01ec64.pth
+Device: cuda
+Evaluated images: 100
+Skipped images: 0
+
+Mean Dice: 0.818568
+Median Dice: 0.931399
+Mean IoU: 0.759482
+Median IoU: 0.871606
