@@ -18,6 +18,8 @@ venv.bak/
 
 # Dataset
 kvasir-seg/
+kvasir-seg-raw/
+*.zip
 .cache/
 
 # Model Checkpoints & Weights
@@ -25,6 +27,7 @@ checkpoints/
 *.pth
 *.pt
 *.ckpt
+*.safetensors
 
 # Cloned External Repositories
 segment-anything/
@@ -34,6 +37,8 @@ test_output*.png
 logs/
 runs/
 *.log
+results/finetune/
+results/zero_shot_visualizations/
 
 # IDE & OS Specific
 .vscode/
