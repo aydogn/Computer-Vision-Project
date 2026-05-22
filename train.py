@@ -101,27 +101,36 @@ def run_epoch(sam, dataloader, criterion, optimizer, device, is_train):
         for batch in dataloader:
             images = batch["image"].to(device)   # [B, 3, 1024, 1024]
             masks  = batch["mask"].to(device)    # [B, 1, 1024, 1024]
+            B = images.shape[0]
 
             # --- Image Encoding (no grad, encoder frozen) ---
             with torch.no_grad():
-                image_embeddings = sam.image_encoder(images)
+                image_embeddings = sam.image_encoder(images)  # [B, C, 64, 64]
 
-            # --- Prompt Encoding (bounding box) ---
-            boxes = masks_to_boxes(masks)        # [B, 4]
-            sparse_embeddings, dense_embeddings = sam.prompt_encoder(
-                points=None,
-                boxes=boxes.unsqueeze(1),        # [B, 1, 4]
-                masks=None,
-            )
+            # SAM mask_decoder her goruntu icin ayri calisir — batch uzerinde dongu
+            batch_logits = []
+            boxes_all = masks_to_boxes(masks)  # [B, 4]
 
-            # --- Mask Decoding ---
-            low_res_logits, _ = sam.mask_decoder(
-                image_embeddings=image_embeddings,
-                image_pe=sam.prompt_encoder.get_dense_pe(),
-                sparse_prompt_embeddings=sparse_embeddings,
-                dense_prompt_embeddings=dense_embeddings,
-                multimask_output=False,
-            )
+            for i in range(B):
+                emb  = image_embeddings[i].unsqueeze(0)   # [1, C, 64, 64]
+                box  = boxes_all[i].unsqueeze(0).unsqueeze(0)  # [1, 1, 4]
+
+                sparse_emb, dense_emb = sam.prompt_encoder(
+                    points=None,
+                    boxes=box,
+                    masks=None,
+                )
+
+                low_res_logit, _ = sam.mask_decoder(
+                    image_embeddings=emb,
+                    image_pe=sam.prompt_encoder.get_dense_pe(),
+                    sparse_prompt_embeddings=sparse_emb,
+                    dense_prompt_embeddings=dense_emb,
+                    multimask_output=False,
+                )
+                batch_logits.append(low_res_logit)  # [1, 1, 256, 256]
+
+            low_res_logits = torch.cat(batch_logits, dim=0)  # [B, 1, 256, 256]
 
             # Upsample to 1024x1024
             logits = F.interpolate(
