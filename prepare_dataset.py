@@ -1,6 +1,6 @@
 """
-Kvasir-SEG resmi zip'inden train/validation/test split'i oluşturur.
-Split: 800 train / 100 validation / 100 test (sabit seed ile tekrarlanabilir)
+Creates train/validation/test splits from the raw Kvasir-SEG dataset.
+Split: 800 train / 100 validation / 100 test (reproducible with fixed seed)
 """
 import os
 import shutil
@@ -19,7 +19,7 @@ def main():
         f for f in os.listdir(images_src)
         if os.path.exists(os.path.join(masks_src, f))
     ])
-    print(f"Toplam eslesen goruntu: {len(all_files)}")
+    print(f"Total matched images: {len(all_files)}")
 
     random.seed(SEED)
     random.shuffle(all_files)
@@ -38,12 +38,12 @@ def main():
         for f in files:
             shutil.copy(os.path.join(images_src, f), os.path.join(img_dir,  f))
             shutil.copy(os.path.join(masks_src,  f), os.path.join(mask_dir, f))
-        print(f"  {split}: {len(files)} goruntu kopyalandi -> {img_dir}")
+        print(f"  {split}: {len(files)} images copied -> {img_dir}")
 
-    print("\nHazir! Klasor yapisi:")
+    print("\nDone! Directory structure:")
     for split in SPLITS:
         n = len(os.listdir(os.path.join(OUT_DIR, split, "images")))
-        print(f"  kvasir-seg/{split}/images -> {n} dosya")
+        print(f"  kvasir-seg/{split}/images -> {n} files")
 
 if __name__ == "__main__":
     main()

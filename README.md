@@ -2,107 +2,108 @@
 
 **Adapting Segment Anything - Decoder Fine-tuning on Domain-Specific Datasets (Medical Image Segmentation)**
 
-**Ekip:** SAM-Med
+**Team:** SAM-Med
 - **Omer Faruk Satik**: Core Codebase & Data Pipeline Lead
 - **Bedirhan Ozturk**: Evaluation & Inference Lead
 - **Abdullah Aydogan**: Model Training & Optimization Lead
 
 ---
 
-## Proje Ozeti
+## Project Summary
 
-Bu proje, Meta'nin **Segment Anything Model (SAM)** mimarisini (ViT-B), endoskopik goruntulerdeki poliplerin (gastrointestinal polipler) piksel seviyesinde bolutlenmesi amaciyla **Kvasir-SEG** veri seti uzerinde ince ayar (fine-tuning) yaparak tip alanina adapte etmeyi amaclamaktadir. Donanim sinirlarina (ornegin 16GB VRAM) saygi duymak adina, SAM'in agir ViT kodlayicisi (encoder) dondurulacak ve sadece hafif maske cozucusu (decoder) egitilecektir.
+This project adapts Meta's **Segment Anything Model (SAM)** architecture (ViT-B) to the medical domain by fine-tuning it on the **Kvasir-SEG** dataset for pixel-level segmentation of gastrointestinal polyps in endoscopic images. To respect hardware constraints (e.g. 16 GB VRAM), the heavy ViT image encoder is fully frozen and only the lightweight mask decoder is trained.
 
 ---
 
-## Kurulum ve Baslangic Yonergesi
+## Setup and Getting Started
 
-Gorevi devralan ekip arkadasinin veya projeyi test edecek hocanin projeyi kendi bilgisayarinda ya da Colab'da sifirdan calistirabilmesi icin asagidaki adimlari sirayla uygulamasi gerekir.
+Follow the steps below in order to run the project from scratch on your local machine or on Colab.
 
-### 0. Projenin Klonlanmasi
+### 0. Clone the Repository
 
 ```bash
 git clone https://github.com/aydogn/Computer-Vision-Project.git
 cd Computer-Vision-Project
 ```
 
-### 1. Conda Ortaminin Olusturulmasi ve Aktif Edilmesi
+### 1. Create and Activate the Conda Environment
 
 ```bash
 conda create -n sam-med python=3.10 -y
 conda activate sam-med
 ```
 
-### 2. Kutuphanelerin Kurulumu
+### 2. Install Dependencies
 
-GPU kullaniliyorsa once CUDA destekli PyTorch kurulumu onerilir:
+If using a GPU, install CUDA-enabled PyTorch first:
 
 ```bash
 pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 ```
 
-Ardindan proje bagimliliklari kurulur:
+Then install the remaining project dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-`requirements.txt` icinde Meta'nin **segment-anything** reposu `git+https://...` baglantisi ile otomatik kurulur. Ek olarak NumPy ve OpenCV surumleri, mevcut PyTorch ortamlariyla uyumlu olacak sekilde sabitlenmistir.
+Meta's **segment-anything** package is installed automatically via the `git+https://...` entry in `requirements.txt`. NumPy and OpenCV versions are pinned for compatibility with the current PyTorch environment.
 
-### 3. Veri Seti ve Model Agirliklarinin Indirilmesi
+### 3. Download Dataset and Model Weights
 
-Kvasir-SEG veri setini Hugging Face uzerinden indirmek icin:
+Download the Kvasir-SEG dataset from Hugging Face:
 
 ```bash
 python download_data.py
 ```
 
-SAM ViT-B pretrained checkpoint dosyasini indirmek icin Windows PowerShell:
+Download the SAM ViT-B pretrained checkpoint — Windows PowerShell:
 
 ```powershell
 mkdir checkpoints
 Invoke-WebRequest -Uri https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -OutFile checkpoints\sam_vit_b_01ec64.pth
 ```
 
-Linux veya Colab:
+Linux or Colab:
 
 ```bash
+mkdir -p checkpoints
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -P checkpoints/
 ```
 
-### 4. Kurulumun Test Edilmesi
+### 4. Verify the Installation
 
-Data pipeline'in dogru calistigini test etmek icin:
+Test that the data pipeline works correctly:
 
 ```bash
 python test_dataset.py
 ```
 
-Bu komut basarili olursa proje ana dizininde `test_output_v2.png` isimli bir ornek cikti olusturur.
+If successful, a sample output image `test_output_v2.png` will be created in the project root.
 
-### 5. Zero-Shot Baseline Calistirilmasi
+### 5. Run the Zero-Shot Baseline
 
-Egitimsiz/pretrained SAM ViT-B modelini Kvasir-SEG test splitinde degerlendirmek icin:
+Evaluate the pretrained SAM ViT-B on the Kvasir-SEG test split without any fine-tuning:
 
 ```bash
 python evaluate_zero_shot.py
 ```
 
-Hizli smoke test icin:
+Quick smoke test:
 
 ```bash
 python evaluate_zero_shot.py --max-images 5 --num-visualizations 5
 ```
 
-Varsayilan yollar:
+Default paths:
 
 ```text
 Dataset root: kvasir-seg
-Checkpoint: checkpoints/sam_vit_b_01ec64.pth
-Output directory: results
+Checkpoint:   checkpoints/sam_vit_b_01ec64.pth
+Output dir:   results
 ```
 
-Uretilen ciktilar:
+Outputs:
 
 ```text
 results/zero_shot_baseline.csv
@@ -110,111 +111,164 @@ results/zero_shot_summary.txt
 results/zero_shot_visualizations/
 ```
 
+### 6. Fine-tune the Decoder
+
+Train only the SAM mask decoder on Kvasir-SEG (encoder frozen):
+
+```bash
+python train.py
+```
+
+Key arguments:
+
+| Argument | Default | Description |
+|---|---|---|
+| `--epochs` | 20 | Number of training epochs |
+| `--batch-size` | 2 | Batch size |
+| `--lr` | 1e-4 | Learning rate (AdamW) |
+| `--checkpoint` | `checkpoints/sam_vit_b_01ec64.pth` | SAM base weights |
+| `--output-dir` | `results/finetune` | Directory for checkpoints and TensorBoard logs |
+
+Monitor training with TensorBoard:
+
+```bash
+tensorboard --logdir results/finetune/tensorboard
+```
+
+### 7. Evaluate the Fine-tuned Model
+
+Run inference on the test split using the fine-tuned decoder:
+
+```bash
+python evaluate_finetuned.py
+```
+
+Outputs saved to `results/finetuned_eval/`:
+
+```text
+finetuned_summary.txt          — mean/median Dice & IoU + comparison with zero-shot baseline
+finetuned_results.csv          — per-image Dice and IoU scores
+visualizations/                — qualitative examples (Image | Ground Truth | Fine-Tuned SAM | Overlay)
+worst_cases_error_analysis.png — 5 lowest-Dice samples for error analysis
+```
+
 ---
 
-## Zero-Shot Baseline Yaklasimi
+## Results
 
-Aşama 2'nin devami kapsaminda SAM modeli fine-tune edilmeden degerlendirilmistir. Bu baseline, ileride Aşama 3'te egitilecek decoder fine-tuned modelin performansini karsilastirmak icin referans olarak kullanilacaktir.
+### Zero-Shot Baseline
 
-Kullanilan protokol:
-
-- Pretrained SAM ViT-B checkpoint yuklendi.
-- Kvasir-SEG `test` splitindeki 100 goruntu kullanildi.
-- Her ground-truth maskeden bounding box prompt cikarildi.
-- SAM `SamPredictor` ile `multimask_output=False` ayarinda tek maske tahmini alindi.
-- Tahmin maskesi ile ground-truth maske arasinda Dice ve IoU metrikleri hesaplandi.
-- Ilk 10 ornek icin niteliksel gorsellestirme kaydedildi.
-
-Bu asamada model agirliklari guncellenmemistir. Fine-tuning islemi Aşama 3 kapsaminda yapilacaktir.
-
-### Zero-Shot Sonuclari
-
-`results/zero_shot_summary.txt` dosyasina kaydedilen sonuclar:
+Evaluated on the Kvasir-SEG test split (100 images) using ground-truth bounding box prompts:
 
 ```text
 Evaluated images: 100
-Skipped images: 0
-Mean Dice: 0.818568
-Median Dice: 0.931399
-Mean IoU: 0.759482
-Median IoU: 0.871606
+Mean Dice:        0.818568
+Median Dice:      0.931399
+Mean IoU:         0.759482
+Median IoU:       0.871606
 ```
 
-Dataset dogrulama sonucu:
+### Fine-Tuned SAM (Decoder Only)
+
+Training configuration: 20 epochs, AdamW lr=1e-4, BCE+Dice loss, batch size=2, encoder frozen.
 
 ```text
-train: images=800 masks=800 matched=800 missing_masks=0 extra_masks=0
-validation: images=100 masks=100 matched=100 missing_masks=0 extra_masks=0
-test: images=100 masks=100 matched=100 missing_masks=0 extra_masks=0
+Evaluated images: 100
+Mean Dice:        0.937444
+Median Dice:      0.960989
+Mean IoU:         0.892464
+Median IoU:       0.924908
 ```
+
+### Comparison
+
+| Model | Mean Dice | Mean IoU |
+|---|---|---|
+| Zero-Shot SAM ViT-B | 0.8186 | 0.7595 |
+| Fine-Tuned SAM ViT-B (decoder only) | **0.9374** | **0.8925** |
+| Improvement | **+11.9 pts** | **+13.3 pts** |
+
+Only 4.3% of total parameters (mask decoder) were trained.
 
 ---
 
-## Proje Yol Haritasi ve Mevcut Durum
+## Zero-Shot Baseline Approach
 
-Projenin **5 asamali** bir uygulama plani bulunmaktadir. Mevcut durumda Aşama 1, Aşama 2 ve Aşama 2'nin devami olan zero-shot baseline tamamlanmistir.
+The pretrained SAM ViT-B model was evaluated without any weight updates to establish a reference for the fine-tuned model:
 
-### Tamamlanan Asamalar
-
-* **Aşama 1: Ortam Kurulumu ve Veri Boru Hatti** (Omer Faruk Satik)
-  - GitHub reposu ve Conda ortami ayarlandi.
-  - Kvasir-SEG indirme scripti (`download_data.py`) yazildi.
-  - SAM ViT-B checkpoint'i sisteme entegre edildi.
-  - Orijinal goruntu ile maskeleri okuyup eslestiren PyTorch `Dataset` sinifi yazildi.
-  - Maskeler binary (0 ve 1) tensor formatina zorlandi.
-
-* **Aşama 2: Veri On Isleme (Data Preprocessing)** (Omer Faruk Satik)
-  - `torchvision` yerine `albumentations` kutuphanesine gecilerek senkronize donusumler kodlandi.
-  - Polip aspect-ratio'sunu korumak icin `LongestMaxSize(1024)` ve siyah piksellerle `PadIfNeeded` eklendi.
-  - Egitim seti icin `HorizontalFlip`, `VerticalFlip`, `RandomRotate90` ve `ColorJitter` ile online veri artirimi saglandi.
-  - SAM standartlarinda (`mean`, `std`) ImageNet normalizasyonu yapildi.
-  - OOM hatalarini engellemek icin `batch_size=2` olan PyTorch `DataLoader` nesnelerini donduren mimari kuruldu.
-
-* **Aşama 2'nin Devami: Sifirdan Test (Zero-Shot Baseline)** (Bedirhan Ozturk)
-  - `evaluate_zero_shot.py` scripti eklendi.
-  - Pretrained SAM ViT-B modeli yuklendi.
-  - `test` splitindeki 100 goruntu uzerinde zero-shot inference calistirildi.
-  - Ground-truth maskelerden bounding box prompt cikarildi.
-  - Dice ve IoU metrikleri hesaplandi.
-  - Sonuclar `results/zero_shot_baseline.csv` ve `results/zero_shot_summary.txt` dosyalarina kaydedildi.
-  - 10 ornek icin `results/zero_shot_visualizations/` altinda gorsellestirme uretildi.
-  - Baseline sonucu: Mean Dice `0.818568`, Mean IoU `0.759482`.
-
-### Siradaki Asamalar
-
-* **Aşama 3: Model Mimarisi ve Egitim Dongusu (Fine-Tuning)** (Abdullah Aydogan)
-  - SAM "Image Encoder" (ViT) parametreleri tamamen dondurulacak (`requires_grad = False`).
-  - Sadece "Mask Decoder" egitime acilacak.
-  - Tibbi segmentasyon icin **BCE Loss + Dice Loss** tanimlanacak.
-  - **AdamW** optimizer kullanilacak.
-  - Epoch bazli PyTorch egitim dongusu yazilacak.
-  - Validation loss takibi icin TensorBoard veya benzeri loglama kullanilacak.
-  - Aşama 2 zero-shot baseline metrikleri, fine-tuning sonrasi performans artisini olcmek icin referans alinacak.
-
-* **Aşama 4: Model Degerlendirmesi ve Gorsellestirme** (Bedirhan Ozturk)
-  - Fine-tuned model ile ayni 100 test goruntusu uzerinde inference alinacak.
-  - Dice ve IoU metrikleri zero-shot baseline ile karsilastirilacak.
-  - Before/After gorsellestirmeleri hazirlanacak.
-  - Zero-shot SAM, fine-tuned SAM ve ground-truth maskeler yan yana raporlanacak.
-  - Hata analizi yapilarak modelin basarisiz oldugu ornekler belirlenecek.
-
-* **Aşama 5: Finalizasyon, Kod Temizligi ve Rapor** (Tum Ekip)
-  - Moduler `.py` dosyalari temizlenecek veya derli toplu bir `Final_Notebook.ipynb` olusturulacak.
-  - GitHub README dosyasi final metrikler ve Before/After gorselleriyle guncellenecek.
-  - Final raporu ve sunum slaytlari hazirlanacak.
-  - Donanim dostu muhendislik cozumleri ve SAM decoder fine-tuning stratejisi vurgulanacak.
+- Pretrained SAM ViT-B checkpoint loaded.
+- 100 images from the Kvasir-SEG `test` split used.
+- Bounding box prompt extracted from each ground-truth mask.
+- Single mask prediction obtained via `SamPredictor` with `multimask_output=False`.
+- Dice and IoU computed against ground-truth masks.
+- Qualitative visualizations saved for the first 10 samples.
 
 ---
 
-## Guncel Dosya ve Cikti Ozeti
+## Project Roadmap
 
-Yeni veya guncellenen onemli dosyalar:
+### Completed
+
+* **Phase 1: Environment Setup & Data Pipeline** (Omer Faruk Satik)
+  - GitHub repository and Conda environment configured.
+  - Kvasir-SEG download script (`download_data.py`) written.
+  - SAM ViT-B checkpoint integrated.
+  - PyTorch `Dataset` class written to read and match images with masks.
+  - Masks forced to binary (0/1) tensor format.
+
+* **Phase 2: Data Preprocessing** (Omer Faruk Satik)
+  - Migrated from `torchvision` to `albumentations` for synchronized transforms.
+  - `LongestMaxSize(1024)` and `PadIfNeeded` added to preserve polyp aspect ratio.
+  - Online augmentation for the training set: `HorizontalFlip`, `VerticalFlip`, `RandomRotate90`, `ColorJitter`.
+  - ImageNet normalization applied using SAM's standard mean and std values.
+  - PyTorch `DataLoader` architecture built with `batch_size=2` to prevent OOM errors.
+
+* **Phase 2 Extension: Zero-Shot Baseline** (Bedirhan Ozturk)
+  - `evaluate_zero_shot.py` script added.
+  - Zero-shot inference run on 100 test images.
+  - Bounding box prompts extracted from ground-truth masks.
+  - Dice and IoU computed and saved to `results/`.
+  - Baseline result: Mean Dice `0.818568`, Mean IoU `0.759482`.
+
+* **Phase 3: Fine-Tuning** (Abdullah Aydogan)
+  - SAM image encoder (ViT) fully frozen (`requires_grad = False`).
+  - Only mask decoder trained (4.3% of total parameters).
+  - BCE + Dice loss defined for medical segmentation.
+  - AdamW optimizer with cosine annealing scheduler.
+  - TensorBoard logging for loss, Dice, IoU, and learning rate.
+  - Best checkpoint saved based on validation Dice.
+  - Final result: Val Dice `0.9284` after 20 epochs.
+
+* **Phase 4: Evaluation & Visualization** (Bedirhan Ozturk)
+  - `evaluate_finetuned.py` script added.
+  - Fine-tuned model evaluated on the same 100 test images.
+  - Dice and IoU compared against zero-shot baseline: +11.9 / +13.3 points.
+  - Qualitative visualizations (Image | Ground Truth | Fine-Tuned SAM | Overlay) generated.
+  - Error analysis: 5 worst-case samples identified and visualized.
+
+### Upcoming
+
+* **Phase 5: Finalization, Code Cleanup & Report** (All Members)
+  - Modular `.py` files cleaned up or consolidated into `Final_Notebook.ipynb`.
+  - README updated with final metrics and before/after visuals.
+  - Final report and presentation slides prepared.
+  - Hardware-friendly engineering decisions and SAM decoder fine-tuning strategy highlighted.
+
+---
+
+## File and Output Summary
 
 ```text
-evaluate_zero_shot.py
-download_data.py
-requirements.txt
-results/zero_shot_baseline.csv
-results/zero_shot_summary.txt
-results/zero_shot_visualizations/
+train.py                                  — fine-tuning training loop
+evaluate_zero_shot.py                     — zero-shot baseline evaluation
+evaluate_finetuned.py                     — fine-tuned model evaluation
+dataset.py                                — PyTorch Dataset and DataLoader
+download_data.py                          — Kvasir-SEG download from Hugging Face
+prepare_dataset.py                        — train/val/test split creation
+results/zero_shot_baseline.csv            — per-image zero-shot results
+results/zero_shot_summary.txt             — zero-shot summary metrics
+results/finetuned_eval/finetuned_results.csv     — per-image fine-tuned results
+results/finetuned_eval/finetuned_summary.txt     — fine-tuned summary + comparison
+results/finetuned_eval/visualizations/           — qualitative output images
+results/finetuned_eval/worst_cases_error_analysis.png — error analysis visual
 ```
