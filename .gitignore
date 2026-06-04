@@ -39,6 +39,8 @@ runs/
 *.log
 results/finetune/
 results/zero_shot_visualizations/
+results/ablation/A*/
+results/ablation/*/tensorboard/
 
 # IDE & OS Specific
 .vscode/
