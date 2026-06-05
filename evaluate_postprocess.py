@@ -121,13 +121,13 @@ def apply_postprocess(mask_bool):
     kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     mask_opened = cv2.morphologyEx(mask_uint8, cv2.MORPH_OPEN, kernel_open)
     
-    # 2. Hole Filling (Delik Doldurma): Polipin içindeki TÜM siyah delikleri (büyüklüğü fark etmeksizin) beyaza boyar.
-    # Dış konturları (sınırları) bulup, o sınırların içini tamamen dolduruyoruz.
+    # 2. Hole filling: fill all dark holes inside the predicted polyp region.
+    # We use external contours and fill their interiors completely.
     contours, _ = cv2.findContours(mask_opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     mask_filled = mask_opened.copy()
     cv2.drawContours(mask_filled, contours, -1, 255, thickness=cv2.FILLED)
     
-    # 3. İPTAL EDİLDİ: "En büyük parçayı tut" kuralını kaldırdık ki çoklu polipler silinmesin.
+    # 3. Do not keep only the largest component, because some images contain multiple polyps.
     mask_final = mask_filled
     
     # 4. Smoothing boundaries: Gaussian blur and threshold
@@ -238,9 +238,9 @@ def write_summary(rows, skipped_count, args, output_path):
         f"Median IoU:  {np.median(iou_raw):.6f}",
         "",
         "--- POST-PROCESSING (OpenCV Morphology) ---",
-        f"Mean Dice:   {dice_pp.mean():.6f} (İyileşme: {dice_pp.mean() - dice_raw.mean():+.6f})",
+        f"Mean Dice:   {dice_pp.mean():.6f} (Change: {dice_pp.mean() - dice_raw.mean():+.6f})",
         f"Median Dice: {np.median(dice_pp):.6f}",
-        f"Mean IoU:    {iou_pp.mean():.6f} (İyileşme: {iou_pp.mean() - iou_raw.mean():+.6f})",
+        f"Mean IoU:    {iou_pp.mean():.6f} (Change: {iou_pp.mean() - iou_raw.mean():+.6f})",
         f"Median IoU:  {np.median(iou_pp):.6f}",
     ]
 
@@ -290,7 +290,7 @@ def main():
             skipped_count += 1
             continue
 
-        # 1. SAM Tahmini
+        # 1. SAM prediction
         predictor.set_image(image)
         masks, scores, _ = predictor.predict(box=bbox, multimask_output=False)
         pred_mask_raw = masks[0].astype(bool)
@@ -298,7 +298,7 @@ def main():
         # 2. OpenCV Post-Processing
         pred_mask_pp = apply_postprocess(pred_mask_raw)
 
-        # 3. Metrik Hesaplamaları
+        # 3. Metric computation
         dice_raw = compute_dice(pred_mask_raw, gt_mask)
         iou_raw  = compute_iou(pred_mask_raw, gt_mask)
         
@@ -316,7 +316,7 @@ def main():
 
         worst_cases_data.append((image, gt_mask, pred_mask_raw, pred_mask_pp, dice_raw, dice_pp, image_path.name))
 
-        # İlk N resim için görselleştirme
+        # Save visualizations for the first N images.
         if len(rows) <= args.num_visualizations:
             vis_path = visualization_dir / f"{len(rows):03d}_{image_path.stem}.png"
             save_visualization(
@@ -325,20 +325,20 @@ def main():
             )
 
         if index % 10 == 0 or index == len(pairs):
-            print(f"İşlendi: {index}/{len(pairs)}")
+            print(f"Processed: {index}/{len(pairs)}")
 
-    # En kötü skorlu (Raw Dice) olan 5 resmi seç
+    # Select the 5 lowest-scoring images by raw Dice.
     worst_cases_data.sort(key=lambda x: x[4]) 
     worst_5 = worst_cases_data[:5]
     worst_path = output_dir / "worst_cases_error_analysis_pp.png"
     save_worst_cases_visualization(worst_5, worst_path)
 
-    # Sonuçları kaydet
+    # Save results.
     write_csv(rows, output_dir / "postprocess_results.csv")
     write_summary(rows, skipped_count, args, output_dir / "postprocess_summary.txt")
 
-    print("\nPost-Process Değerlendirmesi Tamamlandı!")
-    print(f"Görselleştirmeler ve skorlar {output_dir} klasörüne kaydedildi.")
+    print("\nPost-processing evaluation completed.")
+    print(f"Visualizations and scores were saved to: {output_dir}")
 
 if __name__ == "__main__":
     main()

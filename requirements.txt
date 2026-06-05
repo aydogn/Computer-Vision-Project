@@ -6,4 +6,5 @@ numpy<2
 opencv-python<4.12
 matplotlib
 albumentations
+tensorboard
 git+https://github.com/facebookresearch/segment-anything.git

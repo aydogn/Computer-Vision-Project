@@ -3,87 +3,93 @@
 **Adapting Segment Anything - Decoder Fine-tuning on Domain-Specific Datasets (Medical Image Segmentation)**
 
 **Team:** SAM-Med
-- **Omer Faruk Satik**: Core Codebase & Data Pipeline Lead
-- **Bedirhan Ozturk**: Evaluation & Inference Lead
-- **Abdullah Aydogan**: Model Training & Optimization Lead
+
+- **Omer Faruk Satik:** Core Codebase & Data Pipeline Lead
+- **Bedirhan Ozturk:** Evaluation & Inference Lead
+- **Abdullah Aydogan:** Model Training & Optimization Lead
 
 ---
 
 ## Project Summary
 
-This project adapts Meta's **Segment Anything Model (SAM)** architecture (ViT-B) to the medical domain by fine-tuning it on the **Kvasir-SEG** dataset for pixel-level segmentation of gastrointestinal polyps in endoscopic images. To respect hardware constraints (e.g. 16 GB VRAM), the heavy ViT image encoder is fully frozen and only the lightweight mask decoder is trained.
+This project adapts Meta's **Segment Anything Model (SAM) ViT-B** to gastrointestinal polyp segmentation on **Kvasir-SEG**. To keep the solution hardware-friendly, the SAM image encoder is frozen and only the lightweight mask decoder is fine-tuned. The project includes zero-shot evaluation, decoder fine-tuning, ablation studies, prompt-dependence analysis, and post-processing experiments.
+
+The final recommended model is the **20-epoch decoder-only fine-tuned SAM ViT-B** checkpoint. It trains only **4.3%** of SAM's parameters and improves mean Dice from **0.8186** to **0.9374** on the held-out test split.
 
 ---
 
-## Setup and Getting Started
+## Setup
 
-Follow the steps below in order to run the project from scratch on your local machine or on Colab.
-
-### 0. Clone the Repository
-
-```bash
-git clone https://github.com/aydogn/Computer-Vision-Project.git
-cd Computer-Vision-Project
-```
-
-### 1. Create and Activate the Conda Environment
+### 1. Create Environment
 
 ```bash
 conda create -n sam-med python=3.10 -y
 conda activate sam-med
 ```
 
-### 2. Install Dependencies
+### 2. Install PyTorch
 
-If using a GPU, install CUDA-enabled PyTorch first:
+Install the CUDA-enabled PyTorch version suitable for your system. Example for CUDA 12.6:
 
 ```bash
 pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 ```
 
-Then install the remaining project dependencies:
+### 3. Install Project Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Meta's **segment-anything** package is installed automatically via the `git+https://...` entry in `requirements.txt`. NumPy and OpenCV versions are pinned for compatibility with the current PyTorch environment.
+For the optional Dense CRF post-processing experiment, install `pydensecrf` separately if needed:
 
-### 3. Download Dataset and Model Weights
+```bash
+conda install -c conda-forge pydensecrf
+```
 
-Download the Kvasir-SEG dataset from Hugging Face:
+`python-docx` is not required for running the project code.
+
+### 4. Download Dataset
 
 ```bash
 python download_data.py
 ```
 
-Download the SAM ViT-B pretrained checkpoint — Windows PowerShell:
+Expected split after preparation/download:
+
+| Split | Images | Masks |
+|---|---:|---:|
+| Train | 800 | 800 |
+| Validation | 100 | 100 |
+| Test | 100 | 100 |
+
+### 5. Download SAM ViT-B Checkpoint
+
+Windows PowerShell:
 
 ```powershell
 mkdir checkpoints
 Invoke-WebRequest -Uri https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -OutFile checkpoints\sam_vit_b_01ec64.pth
 ```
 
-Linux or Colab:
+Linux / Colab:
 
 ```bash
 mkdir -p checkpoints
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -P checkpoints/
 ```
 
-### 4. Verify the Installation
+---
 
-Test that the data pipeline works correctly:
+## Main Commands
+
+### Verify Dataset Pipeline
 
 ```bash
 python test_dataset.py
 ```
 
-If successful, a sample output image `test_output_v2.png` will be created in the project root.
-
-### 5. Run the Zero-Shot Baseline
-
-Evaluate the pretrained SAM ViT-B on the Kvasir-SEG test split without any fine-tuning:
+### Zero-Shot Baseline
 
 ```bash
 python evaluate_zero_shot.py
@@ -95,180 +101,169 @@ Quick smoke test:
 python evaluate_zero_shot.py --max-images 5 --num-visualizations 5
 ```
 
-Default paths:
-
-```text
-Dataset root: kvasir-seg
-Checkpoint:   checkpoints/sam_vit_b_01ec64.pth
-Output dir:   results
-```
-
-Outputs:
-
-```text
-results/zero_shot_baseline.csv
-results/zero_shot_summary.txt
-results/zero_shot_visualizations/
-```
-
-### 6. Fine-tune the Decoder
-
-Train only the SAM mask decoder on Kvasir-SEG (encoder frozen):
+### Fine-Tune SAM Decoder
 
 ```bash
 python train.py
 ```
 
-Key arguments:
+Default training configuration:
 
-| Argument | Default | Description |
-|---|---|---|
-| `--epochs` | 20 | Number of training epochs |
-| `--batch-size` | 2 | Batch size |
-| `--lr` | 1e-4 | Learning rate (AdamW) |
-| `--checkpoint` | `checkpoints/sam_vit_b_01ec64.pth` | SAM base weights |
-| `--output-dir` | `results/finetune` | Directory for checkpoints and TensorBoard logs |
+| Setting | Value |
+|---|---|
+| Base model | SAM ViT-B |
+| Frozen modules | Image encoder, prompt encoder |
+| Trainable module | Mask decoder only |
+| Trainable parameters | 4,058,340 / 93,735,472 (4.3%) |
+| Loss | 0.5 BCE + 0.5 Dice |
+| Optimizer | AdamW |
+| Learning rate | 1e-4 |
+| Scheduler | CosineAnnealingLR |
+| Epochs | 20 |
+| Batch size | 2 |
 
-Monitor training with TensorBoard:
-
-```bash
-tensorboard --logdir results/finetune/tensorboard
-```
-
-### 7. Evaluate the Fine-tuned Model
-
-Run inference on the test split using the fine-tuned decoder:
+### Evaluate Fine-Tuned Model
 
 ```bash
 python evaluate_finetuned.py
 ```
 
-Outputs saved to `results/finetuned_eval/`:
+### Ablation Studies
 
-```text
-finetuned_summary.txt          — mean/median Dice & IoU + comparison with zero-shot baseline
-finetuned_results.csv          — per-image Dice and IoU scores
-visualizations/                — qualitative examples (Image | Ground Truth | Fine-Tuned SAM | Overlay)
-worst_cases_error_analysis.png — 5 lowest-Dice samples for error analysis
+Run the ablation experiments:
+
+```bash
+bash run_ablations.sh
+```
+
+Summarize ablation results:
+
+```bash
+python ablation_summary.py
+```
+
+### Promptless Training Experiment
+
+```bash
+python train_promptless.py
+```
+
+### Post-Processing Experiments
+
+Morphological post-processing:
+
+```bash
+python evaluate_postprocess.py --finetuned-checkpoint results/finetune/sam_finetuned_best.pth
+```
+
+Dense CRF post-processing:
+
+```bash
+python evaluate_finetuned_crf.py --finetuned-checkpoint results/finetune/sam_finetuned_best.pth
 ```
 
 ---
 
-## Results
+## Evaluation Protocol
 
-### Zero-Shot Baseline
+All main comparisons use the same Kvasir-SEG test split of 100 images. SAM is evaluated with **ground-truth bounding box prompts** extracted from the target masks. This is a prompt-conditioned segmentation setup, not a fully automatic detector. The same prompt protocol is used for zero-shot and fine-tuned evaluations to keep comparisons fair.
 
-Evaluated on the Kvasir-SEG test split (100 images) using ground-truth bounding box prompts:
+Metrics:
 
-```text
-Evaluated images: 100
-Mean Dice:        0.818568
-Median Dice:      0.931399
-Mean IoU:         0.759482
-Median IoU:       0.871606
-```
-
-### Fine-Tuned SAM (Decoder Only)
-
-Training configuration: 20 epochs, AdamW lr=1e-4, BCE+Dice loss, batch size=2, encoder frozen.
-
-```text
-Evaluated images: 100
-Mean Dice:        0.937444
-Median Dice:      0.960989
-Mean IoU:         0.892464
-Median IoU:       0.924908
-```
-
-### Comparison
-
-| Model | Mean Dice | Mean IoU |
-|---|---|---|
-| Zero-Shot SAM ViT-B | 0.8186 | 0.7595 |
-| Fine-Tuned SAM ViT-B (decoder only) | **0.9374** | **0.8925** |
-| Improvement | **+11.9 pts** | **+13.3 pts** |
-
-Only 4.3% of total parameters (mask decoder) were trained.
+- **Dice coefficient** for mask overlap.
+- **IoU** for stricter intersection-over-union evaluation.
 
 ---
 
-## Zero-Shot Baseline Approach
+## Final Results
 
-The pretrained SAM ViT-B model was evaluated without any weight updates to establish a reference for the fine-tuned model:
+### Main Comparison
 
-- Pretrained SAM ViT-B checkpoint loaded.
-- 100 images from the Kvasir-SEG `test` split used.
-- Bounding box prompt extracted from each ground-truth mask.
-- Single mask prediction obtained via `SamPredictor` with `multimask_output=False`.
-- Dice and IoU computed against ground-truth masks.
-- Qualitative visualizations saved for the first 10 samples.
+| Model | Mean Dice | Median Dice | Mean IoU | Median IoU |
+|---|---:|---:|---:|---:|
+| Zero-shot SAM ViT-B | 0.8186 | 0.9314 | 0.7595 | 0.8716 |
+| Fine-tuned SAM decoder, 20 epochs | **0.9374** | **0.9610** | **0.8925** | **0.9249** |
+| Improvement | **+0.1189** | - | **+0.1330** | - |
 
----
+### Full Experiment Summary
 
-## Project Roadmap
+| Rank | Model | Mean Dice | Mean IoU | Delta Dice vs Zero-Shot |
+|---:|---|---:|---:|---:|
+| 1 | Fine-tuned + Morphological post-processing | 0.9384 | 0.8938 | +0.1198 |
+| 2 | Fine-tuned SAM decoder, 20 epochs (primary) | 0.9374 | 0.8925 | +0.1189 |
+| 3 | Extended fine-tuning (+15 epochs) | 0.9373 | 0.8934 | +0.1188 |
+| 4 | Prompt encoder unfrozen | 0.9364 | 0.8868 | +0.1178 |
+| 5 | Dice-only loss | 0.9327 | 0.8823 | +0.1141 |
+| 6 | No augmentation | 0.9319 | 0.8810 | +0.1133 |
+| 7 | BCE-only loss | 0.9271 | 0.8736 | +0.1085 |
+| 8 | High learning rate (1e-3) | 0.9184 | 0.8601 | +0.0998 |
+| 9 | Fine-tuned + Dense CRF | 0.8670 | 0.7860 | +0.0484 |
+| - | Zero-shot SAM ViT-B | 0.8186 | 0.7595 | - |
+| 10 | Promptless fine-tuning | 0.7772 | 0.6795 | -0.0413 |
 
-### Completed
-
-* **Phase 1: Environment Setup & Data Pipeline** (Omer Faruk Satik)
-  - GitHub repository and Conda environment configured.
-  - Kvasir-SEG download script (`download_data.py`) written.
-  - SAM ViT-B checkpoint integrated.
-  - PyTorch `Dataset` class written to read and match images with masks.
-  - Masks forced to binary (0/1) tensor format.
-
-* **Phase 2: Data Preprocessing** (Omer Faruk Satik)
-  - Migrated from `torchvision` to `albumentations` for synchronized transforms.
-  - `LongestMaxSize(1024)` and `PadIfNeeded` added to preserve polyp aspect ratio.
-  - Online augmentation for the training set: `HorizontalFlip`, `VerticalFlip`, `RandomRotate90`, `ColorJitter`.
-  - ImageNet normalization applied using SAM's standard mean and std values.
-  - PyTorch `DataLoader` architecture built with `batch_size=2` to prevent OOM errors.
-
-* **Phase 2 Extension: Zero-Shot Baseline** (Bedirhan Ozturk)
-  - `evaluate_zero_shot.py` script added.
-  - Zero-shot inference run on 100 test images.
-  - Bounding box prompts extracted from ground-truth masks.
-  - Dice and IoU computed and saved to `results/`.
-  - Baseline result: Mean Dice `0.818568`, Mean IoU `0.759482`.
-
-* **Phase 3: Fine-Tuning** (Abdullah Aydogan)
-  - SAM image encoder (ViT) fully frozen (`requires_grad = False`).
-  - Only mask decoder trained (4.3% of total parameters).
-  - BCE + Dice loss defined for medical segmentation.
-  - AdamW optimizer with cosine annealing scheduler.
-  - TensorBoard logging for loss, Dice, IoU, and learning rate.
-  - Best checkpoint saved based on validation Dice.
-  - Final result: Val Dice `0.9284` after 20 epochs.
-
-* **Phase 4: Evaluation & Visualization** (Bedirhan Ozturk)
-  - `evaluate_finetuned.py` script added.
-  - Fine-tuned model evaluated on the same 100 test images.
-  - Dice and IoU compared against zero-shot baseline: +11.9 / +13.3 points.
-  - Qualitative visualizations (Image | Ground Truth | Fine-Tuned SAM | Overlay) generated.
-  - Error analysis: 5 worst-case samples identified and visualized.
-
-### Upcoming
-
-* **Phase 5: Finalization, Code Cleanup & Report** (All Members)
-  - Modular `.py` files cleaned up or consolidated into `Final_Notebook.ipynb`.
-  - README updated with final metrics and before/after visuals.
-  - Final report and presentation slides prepared.
-  - Hardware-friendly engineering decisions and SAM decoder fine-tuning strategy highlighted.
+Although morphology has the numerically highest Dice, the gain is only **+0.0006** over raw fine-tuned SAM on the post-processing subset. The final recommended model remains the **20-epoch decoder-only fine-tuned SAM** because it is simpler and its performance is effectively identical.
 
 ---
 
-## File and Output Summary
+## Key Findings
+
+- Decoder-only fine-tuning substantially improves SAM on medical polyp segmentation.
+- Training only the mask decoder is efficient: only 4.3% of model parameters are updated.
+- BCE + Dice loss outperforms BCE-only and Dice-only variants.
+- Data augmentation is important for generalization; removing it causes overfitting.
+- A high learning rate (`1e-3`) damages adaptation performance.
+- Unfreezing the prompt encoder provides no meaningful gain.
+- Promptless training performs worse than zero-shot, confirming that SAM strongly depends on prompts.
+- Morphological post-processing gives a negligible gain.
+- Dense CRF degrades performance because endoscopic images have weak colour contrast and specular artifacts.
+
+---
+
+## Important Files
+
+### Code
 
 ```text
-train.py                                  — fine-tuning training loop
-evaluate_zero_shot.py                     — zero-shot baseline evaluation
-evaluate_finetuned.py                     — fine-tuned model evaluation
-dataset.py                                — PyTorch Dataset and DataLoader
-download_data.py                          — Kvasir-SEG download from Hugging Face
-prepare_dataset.py                        — train/val/test split creation
-results/zero_shot_baseline.csv            — per-image zero-shot results
-results/zero_shot_summary.txt             — zero-shot summary metrics
-results/finetuned_eval/finetuned_results.csv     — per-image fine-tuned results
-results/finetuned_eval/finetuned_summary.txt     — fine-tuned summary + comparison
-results/finetuned_eval/visualizations/           — qualitative output images
-results/finetuned_eval/worst_cases_error_analysis.png — error analysis visual
+dataset.py                         PyTorch Dataset and DataLoader utilities
+download_data.py                   Kvasir-SEG download script
+prepare_dataset.py                 Reproducible 800/100/100 split helper
+test_dataset.py                    Dataset pipeline smoke test
+evaluate_zero_shot.py              Zero-shot SAM baseline evaluation
+train.py                           Primary decoder fine-tuning script
+evaluate_finetuned.py              Primary fine-tuned model evaluation
+train_ablation.py                  Controlled ablation training script
+run_ablations.sh                   Ablation runner
+ablation_summary.py                Ablation result summarizer
+train_promptless.py                Empty-prompt training experiment
+evaluate_postprocess.py            Morphological post-processing evaluation
+evaluate_finetuned_crf.py          Dense CRF post-processing evaluation
 ```
+
+### Results and Reports
+
+```text
+results/ALL_RESULTS_SUMMARY.txt                 Condensed final result summary
+results/ALL_MODELS_RESULTS.txt                  Detailed all-model comparison
+results/zero_shot_summary.txt                   Zero-shot metrics
+results/finetuned_eval/finetuned_summary.txt    Primary model metrics
+results/ablation/ablation_summary.txt           Ablation table
+YZV416E_FinalReport.docx                        Final project report
+report_assets/                                  Figures used in the final report
+```
+
+Large local files such as `kvasir-seg/`, `checkpoints/`, and `.pth` model weights are intentionally excluded from version control.
+
+---
+
+## Project Status
+
+Completed:
+
+- Phase 1: environment setup and data pipeline
+- Phase 2: preprocessing
+- Phase 2 extension: zero-shot baseline
+- Phase 3: decoder fine-tuning
+- Phase 4: fine-tuned evaluation and visualization
+- Phase 5: final experiments, ablations, post-processing analysis, and final report
+
+The repository is now in final submission format.

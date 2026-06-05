@@ -314,10 +314,10 @@ def main():
             )
 
         if index % 10 == 0 or index == len(pairs):
-            print(f"Islendi: {index}/{len(pairs)}")
+            print(f"Processed: {index}/{len(pairs)}")
 
     if not rows:
-        raise RuntimeError("Hic goruntu degerlendirilmedi. Maske ve dataset yollarini kontrol et.")
+        raise RuntimeError("No images were evaluated. Check mask and dataset paths.")
 
     # Error analysis: 5 lowest-Dice samples
     worst_cases_data.sort(key=lambda x: x[3])

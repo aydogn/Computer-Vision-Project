@@ -13,7 +13,7 @@ try:
     import pydensecrf.densecrf as dcrf
     from pydensecrf.utils import unary_from_labels
 except ImportError:
-    raise ImportError("Lütfen pydensecrf kütüphanesini kurun: conda install -c conda-forge pydensecrf")
+    raise ImportError("Install pydensecrf with: conda install -c conda-forge pydensecrf")
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
@@ -123,26 +123,26 @@ def apply_crf(image_rgb, mask_bool):
     """
     H, W = image_rgb.shape[:2]
     
-    # 2 sinifimiz var: 0 (Arkaplan), 1 (Foreground/Polip)
+    # Two classes: 0 (background), 1 (foreground/polyp).
     d = dcrf.DenseCRF2D(W, H, 2)
     
     mask_int = mask_bool.astype(np.int32)
     
-    # Modelin baslangic tahminine (unary energy) %85 guveniyoruz.
+    # Use the model's initial prediction as unary energy with 85% confidence.
     U = unary_from_labels(mask_int, 2, gt_prob=0.85, zero_unsure=False)
     d.setUnaryEnergy(U)
     
-    # Pairwise Energy (Pikseller arasi iliski)
-    # 1. Pürüzsüzlük (Smoothness) cezası: Birbirine yakın piksellerin aynı renkte olma ihtimalini artırır.
+    # Pairwise energy between pixels.
+    # 1. Smoothness term: encourages nearby pixels to share the same label.
     d.addPairwiseGaussian(sxy=(3, 3), compat=3, kernel=dcrf.DIAG_KERNEL, normalization=dcrf.NORMALIZE_SYMMETRIC)
     
-    # 2. Renk ve Görünüm cezası (Bilateral): Renk farkı olan yerlerde sınır çizmeyi teşvik eder (dokunun değiştiği yer).
+    # 2. Bilateral appearance term: encourages boundaries where colour changes.
     d.addPairwiseBilateral(sxy=(50, 50), srgb=(20, 20, 20), rgbim=image_rgb, compat=10, kernel=dcrf.DIAG_KERNEL, normalization=dcrf.NORMALIZE_SYMMETRIC)
     
-    # CRF modelini 5 iterasyon çalıştır
+    # Run CRF inference for 5 iterations.
     Q = d.inference(5)
     
-    # En yüksek olasılığa sahip sınıfı (0 veya 1) seç
+    # Select the class with the highest probability.
     res = np.argmax(Q, axis=0).reshape((H, W))
     return res.astype(bool)
 
@@ -248,9 +248,9 @@ def write_summary(rows, skipped_count, args, output_path):
         f"Median IoU:  {np.median(iou_raw):.6f}",
         "",
         "--- SAM + CRF POST-PROCESSING ---",
-        f"Mean Dice:   {dice_crf.mean():.6f} (İyileşme: {dice_crf.mean() - dice_raw.mean():+.6f})",
+        f"Mean Dice:   {dice_crf.mean():.6f} (Change: {dice_crf.mean() - dice_raw.mean():+.6f})",
         f"Median Dice: {np.median(dice_crf):.6f}",
-        f"Mean IoU:    {iou_crf.mean():.6f} (İyileşme: {iou_crf.mean() - iou_raw.mean():+.6f})",
+        f"Mean IoU:    {iou_crf.mean():.6f} (Change: {iou_crf.mean() - iou_raw.mean():+.6f})",
         f"Median IoU:  {np.median(iou_crf):.6f}",
     ]
 
@@ -300,7 +300,7 @@ def main():
             skipped_count += 1
             continue
 
-        # 1. SAM Tahmini
+        # 1. SAM prediction
         predictor.set_image(image)
         masks, scores, _ = predictor.predict(box=bbox, multimask_output=False)
         pred_mask_raw = masks[0].astype(bool)
@@ -308,7 +308,7 @@ def main():
         # 2. CRF Post-Processing
         pred_mask_crf = apply_crf(image, pred_mask_raw)
 
-        # 3. Metrik Hesaplamaları
+        # 3. Metric computation
         dice_raw = compute_dice(pred_mask_raw, gt_mask)
         iou_raw  = compute_iou(pred_mask_raw, gt_mask)
         
@@ -326,7 +326,7 @@ def main():
 
         worst_cases_data.append((image, gt_mask, pred_mask_raw, pred_mask_crf, dice_raw, dice_crf, image_path.name))
 
-        # İlk N resim için görselleştirme
+        # Save visualizations for the first N images.
         if len(rows) <= args.num_visualizations:
             vis_path = visualization_dir / f"{len(rows):03d}_{image_path.stem}.png"
             save_visualization(
@@ -335,20 +335,20 @@ def main():
             )
 
         if index % 10 == 0 or index == len(pairs):
-            print(f"İşlendi: {index}/{len(pairs)}")
+            print(f"Processed: {index}/{len(pairs)}")
 
-    # En kötü skorlu (Raw Dice) olan 5 resmi seç
+    # Select the 5 lowest-scoring images by raw Dice.
     worst_cases_data.sort(key=lambda x: x[4]) 
     worst_5 = worst_cases_data[:5]
     worst_path = output_dir / "worst_cases_error_analysis_crf.png"
     save_worst_cases_visualization(worst_5, worst_path)
 
-    # Sonuçları kaydet
+    # Save results.
     write_csv(rows, output_dir / "crf_results.csv")
     write_summary(rows, skipped_count, args, output_dir / "crf_summary.txt")
 
-    print("\nCRF Değerlendirmesi Tamamlandı!")
-    print(f"Görselleştirmeler ve skorlar {output_dir} klasörüne kaydedildi.")
+    print("\nCRF evaluation completed.")
+    print(f"Visualizations and scores were saved to: {output_dir}")
 
 if __name__ == "__main__":
     main()
