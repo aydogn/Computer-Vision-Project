@@ -1,0 +1,17 @@
+Fine-Tuned SAM Evaluation (with CRF Post-Processing)
+Model: vit_b
+Device: cuda
+Evaluated images: 95
+Skipped images: 0
+
+--- RAW SAM PREDICTIONS ---
+Mean Dice:   0.937771
+Median Dice: 0.964943
+Mean IoU:    0.892770
+Median IoU:  0.932262
+
+--- SAM + CRF POST-PROCESSING ---
+Mean Dice:   0.867009 (İyileşme: -0.070762)
+Median Dice: 0.924236
+Mean IoU:    0.786040 (İyileşme: -0.106729)
+Median IoU:  0.859144

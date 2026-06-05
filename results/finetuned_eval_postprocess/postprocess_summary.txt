@@ -1,0 +1,17 @@
+Fine-Tuned SAM Evaluation (with Morphological Post-Processing)
+Model: vit_b
+Device: cuda
+Evaluated images: 95
+Skipped images: 0
+
+--- RAW SAM PREDICTIONS ---
+Mean Dice:   0.937771
+Median Dice: 0.964943
+Mean IoU:    0.892770
+Median IoU:  0.932262
+
+--- POST-PROCESSING (OpenCV Morphology) ---
+Mean Dice:   0.938404 (İyileşme: +0.000632)
+Median Dice: 0.965123
+Mean IoU:    0.893844 (İyileşme: +0.001074)
+Median IoU:  0.932597
