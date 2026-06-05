@@ -1,0 +1,21 @@
+Fine-Tuned SAM Evaluation
+Model: vit_b
+Prompt: ground-truth bounding box
+Dataset root: kvasir-seg
+Base checkpoint: checkpoints\sam_vit_b_01ec64.pth
+Fine-tuned weights: results/finetune_extended/sam_finetuned_best.pth
+Device: cuda
+Evaluated images: 100
+Skipped images: 0
+
+Mean Dice:   0.937289
+Median Dice: 0.961661
+Mean IoU:    0.893437
+Median IoU:  0.926155
+
+--- Zero-Shot Baseline (reference) ---
+Mean Dice:   0.818568
+Mean IoU:    0.759482
+
+Dice improvement: +0.118721
+IoU  improvement: +0.133955

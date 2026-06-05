@@ -1,0 +1,272 @@
+================================================================================
+SAM-Med — ALL MODELS RESULTS
+YZV416E Computer Vision | Istanbul Technical University | Spring 2026
+Team: Abdullah Aydogan · Bedirhan Ozturk · Omer Faruk Satik
+================================================================================
+
+PROJECT SETUP
+─────────────
+Task        : Pixel-level polyp segmentation in endoscopic images (Kvasir-SEG)
+Architecture: SAM ViT-B — image encoder FROZEN, mask decoder fine-tuned only
+Dataset     : 1000 images → 800 train / 100 validation / 100 test
+Prompt      : Ground-truth bounding box (train + eval)
+Hardware    : NVIDIA GeForce RTX 5070 (12 GB VRAM), CUDA 13.2, PyTorch nightly cu128
+Metrics     : Dice coefficient, IoU (Intersection over Union)
+
+================================================================================
+MODEL 0 — ZERO-SHOT BASELINE
+================================================================================
+Description : Pretrained SAM ViT-B evaluated with NO fine-tuning whatsoever.
+              Establishes the lower-bound reference for all comparisons.
+Script      : evaluate_zero_shot.py
+Checkpoint  : checkpoints/sam_vit_b_01ec64.pth (Meta's official weights)
+Output      : results/zero_shot_summary.txt
+              results/zero_shot_baseline.csv
+              results/zero_shot_visualizations/
+
+Results (100 test images):
+  Mean Dice   : 0.818568
+  Median Dice : 0.931399
+  Mean IoU    : 0.759482
+  Median IoU  : 0.871606
+  Skipped     : 0
+
+Analysis:
+  The large gap between mean (0.819) and median (0.931) reveals a bimodal
+  distribution — the model handles clear, protruding polyps well but fails badly
+  on flat polyps and images with heavy specular reflections.
+
+================================================================================
+MODEL 1 — FINE-TUNED SAM (20 epochs) ★ PRIMARY / BEST MODEL ★
+================================================================================
+Description : Decoder-only fine-tuning from scratch. The optimal configuration
+              discovered through ablation studies. This is the main deliverable.
+Script      : train.py
+Command     : python train.py (all defaults)
+Checkpoint  : results/finetune/sam_finetuned_best.pth  (saved at epoch 19/20)
+Output      : results/finetuned_eval/
+
+Hyperparameters:
+  Loss         : BCE (w=0.5) + Dice (w=0.5)
+  Optimizer    : AdamW  lr=1e-4  weight_decay=1e-4
+  Scheduler    : CosineAnnealingLR  T_max=20  eta_min=1e-6
+  Epochs       : 20
+  Batch size   : 2
+  Augmentation : HorizontalFlip + VerticalFlip + RandomRotate90 + ColorJitter
+  Frozen       : Image encoder + Prompt encoder
+  Trainable    : Mask decoder only — 4,058,340 / 93,735,472 params (4.3%)
+  Training time: ~45 min
+
+Validation Dice per epoch:
+  Ep01: 0.8896  Ep06: 0.8953  Ep11: 0.9199  Ep16: 0.9252
+  Ep02: 0.8889  Ep07: 0.8936  Ep12: 0.9217  Ep17: 0.9255
+  Ep03: 0.8913  Ep08: 0.9155  Ep13: 0.9209  Ep18: 0.9279
+  Ep04: 0.9000  Ep09: 0.9032  Ep14: 0.9236  Ep19: 0.9284 ← best
+  Ep05: 0.9027  Ep10: 0.9156  Ep15: 0.9239  Ep20: 0.9272
+
+Results (100 test images):
+  Mean Dice   : 0.937444   (improvement vs zero-shot: +0.118876)
+  Median Dice : 0.960989
+  Mean IoU    : 0.892464   (improvement vs zero-shot: +0.132982)
+  Median IoU  : 0.924908
+  Skipped     : 0
+
+5 worst-case samples:
+  cju5x7lskmad90818frchyfwd.jpg  Dice: 0.1266  — large polyp + specular highlight
+  cju35k2fr3vc50988c85qkrwg.jpg  Dice: 0.7270  — multiple flat polyps
+  cju2oi8sq0i2y0801mektzvw8.jpg  Dice: 0.7423  — over-segmentation (large bbox)
+  cju33belnbyhm0878yxl42233.jpg  Dice: 0.7573  — heavy specular reflections
+  cju84dsvaklpx098750hp83x4.jpg  Dice: 0.7916  — flat polyp, low contrast boundary
+
+Visualizations : results/finetuned_eval/visualizations/  (10 qualitative examples)
+Error analysis : results/finetuned_eval/worst_cases_error_analysis.png
+
+================================================================================
+MODEL 2 — EXTENDED FINE-TUNING (+15 epochs, lr=1e-5)
+================================================================================
+Description : Continued training from Model 1's best checkpoint (epoch 19) using
+              a new cosine annealing cycle at a lower learning rate. Motivation
+              was that both loss and Dice curves were still descending/ascending
+              at epoch 20. Result: negligible improvement, original model wins.
+Script      : train.py
+Command     : python train.py --checkpoint results/finetune/sam_finetuned_best.pth
+                              --epochs 15 --lr 1e-5
+                              --output-dir results/finetune_extended
+Checkpoint  : results/finetune_extended/sam_finetuned_best.pth (saved at epoch 15/15)
+Output      : results/finetuned_extended_eval/
+
+Hyperparameters (changed vs Model 1):
+  Starting weights: results/finetune/sam_finetuned_best.pth
+  lr              : 1e-5  (10x lower than Model 1)
+  Epochs          : 15 additional
+
+Validation Dice per epoch:
+  Ep01: 0.9257  Ep04: 0.9241  Ep07: 0.9168  Ep10: 0.9270  Ep13: 0.9294
+  Ep02: 0.9292  Ep05: 0.9258  Ep08: 0.9257  Ep11: 0.9279  Ep14: 0.9292
+  Ep03: 0.9284  Ep06: 0.9295  Ep09: 0.9272  Ep12: 0.9274  Ep15: 0.9301 ← best
+
+Results (100 test images):
+  Mean Dice   : 0.937289   (vs Model 1: -0.000155 — negligible)
+  Median Dice : 0.961661
+  Mean IoU    : 0.893437   (vs Model 1: +0.000973)
+  Median IoU  : 0.926155
+  Skipped     : 0
+
+5 worst-case samples:
+  cju5x7iskmad90818frchyfwd.jpg  Dice: 0.0366  — degraded vs Model 1 (was 0.1266)
+  cju2oi8sq0i2y0801mektzvw8.jpg  Dice: 0.6723
+  cju35k2fr3vc50988c85qkrwg.jpg  Dice: 0.7257
+  cju84dsvaklpx098750hp83x4.jpg  Dice: 0.7824
+  cju5xjn5mm78b09871spyqhhr.jpg  Dice: 0.8172
+
+Conclusion: Extended training yielded no meaningful gain (ΔDice = -0.0001).
+  The hardest sample worsened from 0.1266 to 0.0366, suggesting the model
+  began overfitting on easy samples while losing robustness on edge cases.
+  USE MODEL 1 (results/finetune/sam_finetuned_best.pth) as the final model.
+
+================================================================================
+ABLATION STUDY — Models 3 through 7
+================================================================================
+Description : Five controlled experiments, each changing exactly one design
+              choice relative to Model 1 (the baseline). All trained for 20
+              epochs on the same data. Evaluated on 100 test images.
+Script      : train_ablation.py
+Runner      : bash run_ablations.sh
+Evaluator   : ablation_summary.py
+Output      : results/ablation/ablation_summary.txt
+
+────────────────────────────────────────────────────────────────────────────────
+MODEL 3 — A1: BCE Only Loss
+────────────────────────────────────────────────────────────────────────────────
+Change       : dice_weight=0.0  (only Binary Cross-Entropy, no Dice loss)
+Best Val Dice: 0.9245 (epoch 14)
+Test Dice    : 0.9271   ΔDice vs baseline: -0.0103
+Test IoU     : 0.8736
+Finding      : BCE optimises per-pixel probability but not mask-level overlap.
+               The Dice loss contributes +1.0 Dice points to the final model.
+
+────────────────────────────────────────────────────────────────────────────────
+MODEL 4 — A2: Dice Only Loss
+────────────────────────────────────────────────────────────────────────────────
+Change       : bce_weight=0.0  (only Dice loss, no BCE)
+Best Val Dice: 0.9255 (epoch 16)
+Test Dice    : 0.9327   ΔDice vs baseline: -0.0048
+Test IoU     : 0.8823
+Finding      : Dice loss alone is better than BCE alone, but the combination
+               is best. BCE provides pixel-level calibration that Dice misses.
+
+────────────────────────────────────────────────────────────────────────────────
+MODEL 5 — A3: No Augmentation
+────────────────────────────────────────────────────────────────────────────────
+Change       : Training transforms = resize + pad + normalize only (no flips,
+               rotations, or colour jitter)
+Best Val Dice: 0.9336 (epoch 11)  ← looked better than baseline on validation!
+Test Dice    : 0.9319   ΔDice vs baseline: -0.0056
+Test IoU     : 0.8810
+Train Dice @ epoch 20: 0.9701  (train-val gap: 0.037 vs 0.005 for baseline)
+
+Finding      : Classic overfitting. Without augmentation the model memorises
+               training samples. Validation Dice appeared competitive (0.9336 >
+               baseline 0.9284), but the test set reveals the truth: 0.9319 <
+               0.9374. Augmentation is essential for generalisation.
+
+────────────────────────────────────────────────────────────────────────────────
+MODEL 6 — A4: High Learning Rate (lr=1e-3)
+────────────────────────────────────────────────────────────────────────────────
+Change       : lr=1e-3 (10x higher than baseline)
+Epoch 1 Val Dice: 0.8456  (started at Dice=0.59 on training — gradient explosion)
+Best Val Dice: 0.9123 (epoch 18)
+Test Dice    : 0.9184   ΔDice vs baseline: -0.0190  ← largest drop
+Test IoU     : 0.8601
+Finding      : lr=1e-3 disrupts the pretrained SAM representations in the
+               very first epoch. The model never fully recovers, finishing 1.9
+               Dice points below the baseline. lr=1e-4 is the optimal value
+               for decoder-only fine-tuning of SAM on this dataset.
+
+────────────────────────────────────────────────────────────────────────────────
+MODEL 7 — A5: Prompt Encoder Unfrozen
+────────────────────────────────────────────────────────────────────────────────
+Change       : Prompt encoder trainable in addition to mask decoder
+               (4,064,560 trainable params vs 4,058,340 — +6,220 params, +0.15%)
+Best Val Dice: 0.9274 (epoch 13)
+Test Dice    : 0.9364   ΔDice vs baseline: -0.0010  ← smallest drop
+Test IoU     : 0.8868
+Finding      : Essentially identical to baseline. The prompt encoder processes
+               only bounding box coordinates; its pretrained embeddings are
+               already sufficient for this task. Freezing it is the right call.
+
+================================================================================
+FULL COMPARISON TABLE (all models, test set)
+================================================================================
+
+  Rank  Model                          Mean Dice  Mean IoU  ΔDice vs ZS
+  ────────────────────────────────────────────────────────────────────────
+   1  ★ Model 1 — Fine-Tuned (20 ep)    0.9374     0.8925    +0.1189
+   2    Model 2 — Extended (+15 ep)     0.9373     0.8934    +0.1188
+   3    A5 — Prompt enc unfrozen        0.9364     0.8868    +0.1178
+   4    A2 — Dice only loss             0.9327     0.8823    +0.1141
+   5    A3 — No augmentation            0.9319     0.8810    +0.1133
+   6    A1 — BCE only loss              0.9271     0.8736    +0.1085
+   7    A4 — High LR (1e-3)             0.9184     0.8601    +0.0998
+   —    Model 0 — Zero-Shot             0.8186     0.7595       —
+
+================================================================================
+KEY TAKEAWAYS FOR FUTURE WORK
+================================================================================
+
+  1. Combined BCE+Dice loss is consistently the best choice for binary
+     medical segmentation with SAM.
+
+  2. lr=1e-4 with cosine annealing to 1e-6 is optimal for decoder fine-tuning.
+     Higher LR (1e-3) destroys pretrained representations.
+
+  3. Augmentation (flips, rotations, colour jitter) is critical — without it,
+     the model overfits despite only having 800 training images.
+
+  4. Freezing the prompt encoder is sufficient. Fine-tuning it adds 6K params
+     and zero test performance gain.
+
+  5. 20 epochs is the sweet spot. Continuing with lr=1e-5 for 15 more epochs
+     yielded ΔDice = -0.0001 on the test set.
+
+  6. Remaining failure modes: heavy specular reflections, flat/sessile polyps,
+     and very large polyps whose bounding box covers most of the frame.
+     Future work could explore point prompts or learned prompt generation.
+
+================================================================================
+FILE MAP
+================================================================================
+
+  results/
+  ├── ALL_MODELS_RESULTS.txt                    ← THIS FILE
+  ├── ALL_RESULTS_SUMMARY.txt                   ← condensed summary
+  ├── zero_shot_baseline.csv                    ← per-image zero-shot scores
+  ├── zero_shot_summary.txt                     ← zero-shot metrics
+  ├── finetuned_eval/                           ← Model 1 evaluation
+  │   ├── finetuned_results.csv
+  │   ├── finetuned_summary.txt
+  │   ├── worst_cases_error_analysis.png
+  │   └── visualizations/
+  ├── finetuned_extended_eval/                  ← Model 2 evaluation
+  │   ├── finetuned_results.csv
+  │   ├── finetuned_summary.txt
+  │   ├── worst_cases_error_analysis.png
+  │   └── visualizations/
+  └── ablation/
+      ├── ablation_summary.txt                  ← ablation table
+      ├── A1_bce_only/                          ← Model 3
+      ├── A2_dice_only/                         ← Model 4
+      ├── A3_no_aug/                            ← Model 5
+      ├── A4_high_lr/                           ← Model 6
+      └── A5_prompt_encoder/                    ← Model 7
+
+  Checkpoints (local only — not in git):
+  ├── checkpoints/sam_vit_b_01ec64.pth          ← Meta pretrained (~375 MB)
+  │   Download: https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+  ├── results/finetune/sam_finetuned_best.pth   ← ★ BEST MODEL (epoch 19)
+  ├── results/finetune_extended/sam_finetuned_best.pth
+  └── results/ablation/A*/sam_finetuned_best.pth
+
+================================================================================
+END
+================================================================================

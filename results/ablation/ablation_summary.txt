@@ -1,0 +1,10 @@
+Ablation Study Results
+======================================================================
+Experiment                                     Mean Dice   Mean IoU   Delta Dice
+======================================================================
+Baseline                                          0.9374     0.8925            —
+A1 BCE only loss                                  0.9271     0.8736      -0.0103
+A2 Dice only loss                                 0.9327     0.8823      -0.0048
+A3 No augmentation                                0.9319     0.8810      -0.0056
+A4 High LR (1e-3)                                 0.9184     0.8601      -0.0190
+A5 + Prompt encoder unfrozen                      0.9364     0.8868      -0.0010
