@@ -4,9 +4,9 @@
 
 **Team:** SAM-Med
 
-- **Omer Faruk Satik:** Core Codebase & Data Pipeline Lead
-- **Bedirhan Ozturk:** Evaluation & Inference Lead
-- **Abdullah Aydogan:** Model Training & Optimization Lead
+- **Ömer Faruk Satık:** Core Codebase & Data Pipeline Lead
+- **Bedirhan Öztürk:** Evaluation & Inference Lead
+- **Abdullah Aydoğan:** Model Training & Optimization Lead
 
 ---
 
