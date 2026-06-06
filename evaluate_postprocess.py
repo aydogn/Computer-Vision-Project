@@ -24,7 +24,7 @@ def parse_args():
     )
     parser.add_argument(
         "--finetuned-checkpoint",
-        default=os.path.join("models", "sam_finetuned_best.pth"),
+        default=os.path.join("results", "finetune", "sam_finetuned_best.pth"),
         help="Path to the fine-tuned decoder weights (.pth).",
     )
     parser.add_argument("--model-type", default="vit_b", choices=["vit_b", "vit_l", "vit_h"])

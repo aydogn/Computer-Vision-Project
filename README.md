@@ -79,6 +79,15 @@ mkdir -p checkpoints
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth -P checkpoints/
 ```
 
+### 6. Download Fine-Tuned Model Checkpoint (Optional)
+
+If you want to skip the training phase and directly evaluate our best model, you can download the fine-tuned weights here:
+
+- **[Download sam_finetuned_best.pth from Google Drive](https://drive.google.com/file/d/1KJAkPOuRXVvDiaVD-G_4SfcXii7NjvTm/view?usp=sharing)**
+
+Please place the downloaded file at the following path before running evaluation scripts:
+`results/finetune/sam_finetuned_best.pth`
+
 ---
 
 ## Main Commands
